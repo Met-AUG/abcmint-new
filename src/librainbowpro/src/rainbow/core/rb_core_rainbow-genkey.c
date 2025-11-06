@@ -22,7 +22,7 @@
 #define PRINTF_TO_BUF sprintf_s
 #endif
 
-#ifdef LINUX_VERSION
+#if defined(LINUX_VERSION) || defined(MAC_OSX)
 #define PRINTF_TO_BUF snprintf 
 #endif
 

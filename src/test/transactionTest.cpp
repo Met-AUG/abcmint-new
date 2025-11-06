@@ -30,7 +30,7 @@ SetupDummyInputs(CBasicKeyStore& keystoreRet, CCoinsView & coinsRet)
     CKey key[4];
     for (int i = 0; i < 4; i++)
     {
-        key[i].MakeNewKey();
+        key[i].MakeNewKey(0);  // Use config_value=0 for standard Rainbow
         keystoreRet.AddKey(key[i]);
     }
 

@@ -1004,7 +1004,11 @@ const boost::filesystem::path &GetDataDir(bool fNetSpecific)
 boost::filesystem::path GetConfigFile()
 {
     boost::filesystem::path pathConfigFile(GetArg("-conf", "abcmint.conf"));
+#if BOOST_VERSION >= 104600
+    if (!pathConfigFile.is_absolute()) pathConfigFile = GetDataDir(false) / pathConfigFile;
+#else
     if (!pathConfigFile.is_complete()) pathConfigFile = GetDataDir(false) / pathConfigFile;
+#endif
     return pathConfigFile;
 }
 
@@ -1038,7 +1042,11 @@ void ReadConfigFile(map<string, string>& mapSettingsRet,
 boost::filesystem::path GetPidFile()
 {
     boost::filesystem::path pathPidFile(GetArg("-pid", "abcmint.pid"));
+#if BOOST_VERSION >= 104600
+    if (!pathPidFile.is_absolute()) pathPidFile = GetDataDir() / pathPidFile;
+#else
     if (!pathPidFile.is_complete()) pathPidFile = GetDataDir() / pathPidFile;
+#endif
     return pathPidFile;
 }
 

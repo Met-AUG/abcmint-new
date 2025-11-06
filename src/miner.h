@@ -4,7 +4,13 @@
 #define ABCMINT_MINER_H
 
 #include <inttypes.h>
+#if defined(__x86_64__) || defined(__i386__)
 #include <emmintrin.h>
+#elif defined(__aarch64__) || defined(__arm64__)
+// ARM architecture - SSE2 intrinsics not available
+// Use ARM NEON intrinsics if needed or portable code
+#include <arm_neon.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -84,7 +90,28 @@ uint64_t to_gray(uint64_t i);
 uint64_t rdtsc(void);
 pck_vector_t packed_eval(LUT_t LUT, int n, int d, pck_vector_t *F, uint64_t i);
 void moebius_transform(int n, pck_vector_t F[], solution_callback_t callback, void* callback_state, CBlockIndex* pindexPrev); 
+
+// Vec4 typedef for different architectures
+#if defined(__x86_64__) || defined(__i386__)
+typedef union {
+    __m128i v;
+    uint16_t e[8];
+} Vec4;
 void print_vec(__m128i foo);
+#elif defined(__aarch64__) || defined(__arm64__)
+typedef union {
+    uint64_t v[2];
+    uint16_t e[8];
+} Vec4;
+void print_vec(Vec4 foo);
+#else
+// Fallback for other architectures
+typedef union {
+    uint64_t v[2];
+    uint16_t e[8];
+} Vec4;
+void print_vec(Vec4 foo);
+#endif
 void exhaustive_ia32_deg_2(LUT_t LUT, 
                                        int n, 
                                        pck_vector_t F[], 

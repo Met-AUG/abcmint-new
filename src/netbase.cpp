@@ -372,6 +372,13 @@ bool static ConnectSocketDirectly(const CService &addrConnect, SOCKET& hSocketRe
     in_keep_alive.keepalivetime = 60000;
     WSAIoctl(hSocket, SIO_KEEPALIVE_VALS, (LPVOID)&in_keep_alive, sizeof(struct tcp_keepalive),
         (LPVOID)&out_keep_alive, sizeof(struct tcp_keepalive), &ul_bytes_return, NULL, NULL);
+#elif defined(__APPLE__)
+    int idel = 60;
+    int interval = 20;
+    int cnt = 3;
+    setsockopt(hSocket, IPPROTO_TCP, TCP_KEEPALIVE, (const void *)&idel, sizeof(idel));
+    setsockopt(hSocket, IPPROTO_TCP, TCP_KEEPINTVL, (const void *)&interval, sizeof(interval));
+    setsockopt(hSocket, IPPROTO_TCP, TCP_KEEPCNT, (const void *)&cnt, sizeof(cnt));
 #else
     int idel = 60;
     int interval = 20;

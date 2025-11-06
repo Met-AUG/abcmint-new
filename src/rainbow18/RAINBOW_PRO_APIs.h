@@ -28,6 +28,23 @@
 
 #endif
 
+#if defined(__APPLE__) || defined(__MACH__)
+/* macOS */
+#ifndef RBPROCALL
+#define RBPROCALL extern unsigned int
+#endif
+#ifndef RBPROCALL_S
+#define RBPROCALL_S extern int  
+#endif
+#ifndef RBPROCALL_VOID
+#define RBPROCALL_VOID extern void
+#endif
+#ifndef RBPROCALL_VOIDP
+#define RBPROCALL_VOIDP extern void*
+#endif
+
+#endif
+
 #ifdef WIN32_VERSION
 #ifndef RBPROCALL
 #define RBPROCALL extern __declspec(dllexport)  unsigned int

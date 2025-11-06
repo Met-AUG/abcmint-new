@@ -6,20 +6,22 @@
 # Mac OS X makefile for abcmint
 # Originally by Laszlo Hanyecz (solar@heliacal.net)
 
-CXX=llvm-g++
-DEPSDIR=/usr/local
-LIBDIR=/usr/local/opt
+CXX=clang++
+DEPSDIR=/opt/homebrew
+LIBDIR=/opt/homebrew/opt
 
 INCLUDEPATHS= \
  -I"$(CURDIR)" \
  -I"$(CURDIR)"/obj \
  -I"$(DEPSDIR)/include" \
- -I"$(LIBDIR)/openssl/include" \
- -I"$(LIBDIR)/db/include" 
+ -I"$(LIBDIR)/openssl@3/include" \
+ -I"$(LIBDIR)/berkeley-db@5/include" \
+ -I"$(LIBDIR)/boost/include" 
 LIBPATHS= \
  -L"$(DEPSDIR)/lib" \
- -L"$(LIBDIR)/openssl/lib" \
- -L"$(LIBDIR)/db/lib" 
+ -L"$(LIBDIR)/openssl@3/lib" \
+ -L"$(LIBDIR)/berkeley-db@5/lib" \
+ -L"$(LIBDIR)/boost/lib" 
 
 
 USE_UPNP:=1
@@ -32,22 +34,24 @@ TESTDEFS = -DTEST_DATA_DIR=$(abspath test/data)
 ifdef STATIC
 # Build STATIC if you are redistributing the abcmint binary
 TESTLIBS += \
- $(DEPSDIR)/lib/libboost_unit_test_framework.a
+ $(LIBDIR)/boost/lib/libboost_unit_test_framework.a
+# Note: boost_system is header-only since Boost 1.69, no need to link
+# Note: Berkeley DB 5 on Homebrew only provides dynamic libs
 LIBS += \
- $(DEPSDIR)/lib/libboost_system.a \
- $(DEPSDIR)/lib/libboost_filesystem.a \
- $(DEPSDIR)/lib/libboost_program_options.a \
- $(DEPSDIR)/lib/libboost_thread.a \
- $(DEPSDIR)/lib/libboost_chrono.a \
- $(LIBDIR)/openssl/lib/libssl.a \
- $(LIBDIR)/openssl/lib/libcrypto.a \
- $(LIBDIR)/db/lib/libdb_cxx-6.2.a \
- -lz
+ $(LIBDIR)/boost/lib/libboost_filesystem.a \
+ $(LIBDIR)/boost/lib/libboost_program_options.a \
+ $(LIBDIR)/boost/lib/libboost_thread.a \
+ $(LIBDIR)/boost/lib/libboost_chrono.a \
+ $(LIBDIR)/openssl@3/lib/libssl.a \
+ $(LIBDIR)/openssl@3/lib/libcrypto.a \
+ -ldb_cxx \
+ -lz \
+ $(CURDIR)/rainbow18/librainbowpro_unix_arm64.a
 else
 TESTLIBS += \
  -lboost_unit_test_framework
 LIBS += \
- -ldb_cxx-6.2 \
+ -ldb_cxx \
  -lboost_system \
  -lboost_filesystem \
  -lboost_program_options \
@@ -72,7 +76,7 @@ endif
 
 # ppc doesn't work because we don't support big-endian
 CFLAGS += -Wall -Wextra -Wformat -Wformat-security -Wno-unused-parameter \
-    $(DEBUGFLAGS) $(DEFS) $(INCLUDEPATHS)
+    $(DEBUGFLAGS) $(DEFS) $(INCLUDEPATHS) -fno-stack-protector
 
 OBJS= \
     leveldb/libleveldb.a \
@@ -110,6 +114,7 @@ OBJS= \
     obj/noui.o \
     obj/leveldb.o \
     obj/txdb.o \
+    obj/validationinterface.o \
     obj/abcmint.o \
     obj/miner.o
 
@@ -174,7 +179,7 @@ obj/%.o: %.cpp
 	  rm -f $(@:%.o=%.d)
 
 abcmint: $(OBJS:obj/%=obj/%)
-	$(CXX) $(CFLAGS) -o $@ $(LIBPATHS) $^ $(LIBS)
+	$(CXX) $(CFLAGS) -Wl,-stack_size,0x8000000 -o $@ $(LIBPATHS) $^ $(LIBS)
 
 TESTOBJS := obj-test/gtest.a obj-test/gtest_main.a
 TESTOBJS += $(patsubst test/%.cpp,obj-test/%.o,$(wildcard test/*.cpp))

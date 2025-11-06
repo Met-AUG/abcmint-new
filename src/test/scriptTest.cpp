@@ -139,7 +139,10 @@ sign_multisig(CScript scriptPubKey, std::vector<CKey> keys, CTransaction transac
     BOOST_FOREACH(CKey key, keys)
     {
         vector<unsigned char> vchSig;
-        EXPECT_TRUE(key.Sign(hash, vchSig));
+        // Use config_value=0 (standard Rainbow) for testing
+        // Convert uint256 hash to raw bytes
+        unsigned char* hashBytes = (unsigned char*)&hash;
+        EXPECT_TRUE(key.Sign(0, hashBytes, 32, vchSig, false));
         vchSig.push_back((unsigned char)SIGHASH_ALL);
         result << vchSig;
     }

@@ -12,7 +12,7 @@
 extern  "C" {
 #endif
 #if defined(__APPLE__) && defined(__MACH__)
-    #include <sys/malloc.h>
+    #include <stdlib.h>
 #else
     #include <malloc.h>
 #endif

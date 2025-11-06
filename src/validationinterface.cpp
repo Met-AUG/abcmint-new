@@ -5,6 +5,9 @@
 
 #include "validationinterface.h"
 
+// For Boost 1.60+, need to explicitly use placeholders namespace
+using namespace boost::placeholders;
+
 static CMainSignals g_signals;
 
 CMainSignals& GetMainSignals()

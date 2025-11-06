@@ -4,7 +4,7 @@
 #include "init.h"
 #include "miner.h"
 #include "wallet.h"
-
+#include <bitset>
 
 using namespace std;
 using namespace boost;
@@ -13,10 +13,7 @@ using namespace boost;
 #include "gpumining.h"
 #endif
 
-typedef union {
-    __m128i v;
-    uint16_t e[8];
-} Vec4;
+// Vec4 typedef is now defined in miner.h for all architectures
 
 #define THRESHOLD 9
 vector_t init_vector(int n_rows) {
@@ -44,11 +41,25 @@ uint64_t rdtsc() {
     __asm__ volatile ("rdtsc" : "=A" (x));
     return x;
 }
-#else
+#elif defined(__x86_64__)
 uint64_t rdtsc() {
     uint64_t a, d;
     __asm__ volatile ("rdtsc" : "=a" (a), "=d" (d));
     return (d<<32) | a;
+}
+#elif defined(__aarch64__) || defined(__arm64__)
+// ARM architecture - use system timer
+uint64_t rdtsc() {
+    uint64_t val;
+    __asm__ volatile("mrs %0, cntvct_el0" : "=r" (val));
+    return val;
+}
+#else
+// Fallback for other architectures - use clock
+uint64_t rdtsc() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000000ULL + ts.tv_nsec;
 }
 #endif
 
@@ -113,12 +124,19 @@ void moebius_transform(int n, pck_vector_t F[], solution_callback_t callback, vo
                 return;
 }
 
+#if defined(__x86_64__) || defined(__i386__)
 void print_vec(__m128i foo) {
     Vec4 bar;
     bar.v = foo;
     for(int i=0; i<8; i++)
         printf("%04x ", bar.e[i]);
 }
+#else
+void print_vec(Vec4 foo) {
+    for(int i=0; i<8; i++)
+        printf("%04x ", foo.e[i]);
+}
+#endif
 
 pck_vector_t packed_eval_deg_2(LUT_t LUT, int n, pck_vector_t F[], uint64_t i) {
     // first expand the values of the variables from `i`
@@ -2168,6 +2186,7 @@ bool CheckSolution(uint256 hash, unsigned int nBits, uint256 prevblockhash, int 
     } else {
         height = 0;
 	}
+    
     if (height < 25217) {
 	    GenCoeffMatrix(hash, nBits, coeffMatrix);
     } else if (height < RAINBOWFORkHEIGHT) {

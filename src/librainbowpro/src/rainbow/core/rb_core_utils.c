@@ -71,7 +71,7 @@ int rb_byte_fget( FILE * fp, unsigned char *v , unsigned int n_byte )
 		int t = sscanf_s(vv, "%2x", &value);
 #endif
 
-#ifdef LINUX_VERSION
+#if defined(LINUX_VERSION) || defined(MAC_OSX)
 		int t = sscanf( vv , "%2x" , &value );
 #endif
 		if( 1 == t ) {

@@ -32,7 +32,11 @@ CReserveKey* pMiningKey = NULL;
 static std::string strRPCUserColonPass;
 
 // These are created by StartRPCThreads, destroyed in StopRPCThreads
+#if BOOST_VERSION >= 107000
+static asio::io_context* rpc_io_service = NULL;
+#else
 static asio::io_service* rpc_io_service = NULL;
+#endif
 static ssl::context* rpc_ssl_context = NULL;
 static boost::thread_group* rpc_worker_group = NULL;
 
@@ -535,15 +539,27 @@ bool ClientAllowed(const boost::asio::ip::address& address)
 {
     // Make sure that IPv4-compatible and IPv4-mapped IPv6 addresses are treated as IPv4 addresses
     if (address.is_v6()
+#if BOOST_VERSION < 106600
      && (address.to_v6().is_v4_compatible()
       || address.to_v6().is_v4_mapped()))
+#else
+     && address.to_v6().is_v4_mapped())
+#endif
+#if BOOST_VERSION >= 106600
+        return ClientAllowed(boost::asio::ip::make_address_v4(boost::asio::ip::v4_mapped, address.to_v6()));
+#else
         return ClientAllowed(address.to_v6().to_v4());
+#endif
 
     if (address == asio::ip::address_v4::loopback()
      || address == asio::ip::address_v6::loopback()
      || (address.is_v4()
          // Check whether IPv4 addresses match 127.0.0.0/8 (loopback subnet)
+#if BOOST_VERSION >= 106600
+      && (address.to_v4().to_uint() & 0xff000000) == 0x7f000000))
+#else
       && (address.to_v4().to_ulong() & 0xff000000) == 0x7f000000))
+#endif
         return true;
 
     const string strAddress = address.to_string();
@@ -586,7 +602,22 @@ public:
     }
     bool connect(const std::string& server, const std::string& port)
     {
+#if BOOST_VERSION >= 107000
+        ip::tcp::resolver resolver(stream.get_executor());
+#else
         ip::tcp::resolver resolver(stream.get_io_service());
+#endif
+#if BOOST_VERSION >= 106600
+        auto endpoints = resolver.resolve(server, port);
+        boost::system::error_code error = asio::error::host_not_found;
+        for (const auto& endpoint : endpoints)
+        {
+            stream.lowest_layer().close();
+            stream.lowest_layer().connect(endpoint, error);
+            if (!error)
+                break;
+        }
+#else
         ip::tcp::resolver::query query(server.c_str(), port.c_str());
         ip::tcp::resolver::iterator endpoint_iterator = resolver.resolve(query);
         ip::tcp::resolver::iterator end;
@@ -596,6 +627,7 @@ public:
             stream.lowest_layer().close();
             stream.lowest_layer().connect(*endpoint_iterator++, error);
         }
+#endif
         if (error)
             return false;
         return true;
@@ -621,6 +653,17 @@ template <typename Protocol>
 class AcceptedConnectionImpl : public AcceptedConnection
 {
 public:
+#if BOOST_VERSION >= 107000
+    AcceptedConnectionImpl(
+            asio::io_context& io_service,
+            ssl::context &context,
+            bool fUseSSL) :
+        sslStream(io_service, context),
+        _d(sslStream, fUseSSL),
+        _stream(_d)
+    {
+    }
+#else
     AcceptedConnectionImpl(
             asio::io_service& io_service,
             ssl::context &context,
@@ -630,6 +673,7 @@ public:
         _stream(_d)
     {
     }
+#endif
 
     virtual std::iostream& stream()
     {
@@ -673,7 +717,12 @@ static void RPCListen(boost::shared_ptr< basic_socket_acceptor<Protocol, SocketA
                    const bool fUseSSL)
 {
     // Accept connection
+#if BOOST_VERSION >= 107000
+    auto& io_ctx = static_cast<asio::io_context&>(acceptor->get_executor().context());
+    AcceptedConnectionImpl<Protocol>* conn = new AcceptedConnectionImpl<Protocol>(io_ctx, context, fUseSSL);
+#else
     AcceptedConnectionImpl<Protocol>* conn = new AcceptedConnectionImpl<Protocol>(acceptor->get_io_service(), context, fUseSSL);
+#endif
 
     acceptor->async_accept(
             conn->sslStream.lowest_layer(),
@@ -761,8 +810,13 @@ void StartRPCThreads()
     }
 
     assert(rpc_io_service == NULL);
+#if BOOST_VERSION >= 107000
+    rpc_io_service = new asio::io_context();
+    rpc_ssl_context = new ssl::context(ssl::context::sslv23);
+#else
     rpc_io_service = new asio::io_service();
     rpc_ssl_context = new ssl::context(*rpc_io_service, ssl::context::sslv23);
+#endif
 
     const bool fUseSSL = GetBoolArg("-rpcssl");
 
@@ -770,18 +824,30 @@ void StartRPCThreads()
     {
         rpc_ssl_context->set_options(ssl::context::no_sslv2);
 
-        filesystem::path pathCertFile(GetArg("-rpcsslcertificatechainfile", "server.cert"));
-        if (!pathCertFile.is_complete()) pathCertFile = filesystem::path(GetDataDir()) / pathCertFile;
-        if (filesystem::exists(pathCertFile)) rpc_ssl_context->use_certificate_chain_file(pathCertFile.string());
+        boost::filesystem::path pathCertFile(GetArg("-rpcsslcertificatechainfile", "server.cert"));
+#if BOOST_VERSION >= 104600
+        if (!pathCertFile.is_absolute()) pathCertFile = boost::filesystem::path(GetDataDir()) / pathCertFile;
+#else
+        if (!pathCertFile.is_complete()) pathCertFile = boost::filesystem::path(GetDataDir()) / pathCertFile;
+#endif
+        if (boost::filesystem::exists(pathCertFile)) rpc_ssl_context->use_certificate_chain_file(pathCertFile.string());
         else printf("ThreadRPCServer ERROR: missing server certificate file %s\n", pathCertFile.string().c_str());
 
-        filesystem::path pathPKFile(GetArg("-rpcsslprivatekeyfile", "server.pem"));
-        if (!pathPKFile.is_complete()) pathPKFile = filesystem::path(GetDataDir()) / pathPKFile;
-        if (filesystem::exists(pathPKFile)) rpc_ssl_context->use_private_key_file(pathPKFile.string(), ssl::context::pem);
+        boost::filesystem::path pathPKFile(GetArg("-rpcsslprivatekeyfile", "server.pem"));
+#if BOOST_VERSION >= 104600
+        if (!pathPKFile.is_absolute()) pathPKFile = boost::filesystem::path(GetDataDir()) / pathPKFile;
+#else
+        if (!pathPKFile.is_complete()) pathPKFile = boost::filesystem::path(GetDataDir()) / pathPKFile;
+#endif
+        if (boost::filesystem::exists(pathPKFile)) rpc_ssl_context->use_private_key_file(pathPKFile.string(), ssl::context::pem);
         else printf("ThreadRPCServer ERROR: missing server private key file %s\n", pathPKFile.string().c_str());
 
         string strCiphers = GetArg("-rpcsslciphers", "TLSv1+HIGH:!SSLv2:!aNULL:!eNULL:!AH:!3DES:@STRENGTH");
+#if BOOST_VERSION >= 107000
+        SSL_CTX_set_cipher_list(rpc_ssl_context->native_handle(), strCiphers.c_str());
+#else
         SSL_CTX_set_cipher_list(rpc_ssl_context->impl(), strCiphers.c_str());
+#endif
     }
 
     // Try a dual IPv6/IPv4 socket, falling back to separate IPv4 and IPv6 sockets
@@ -802,7 +868,11 @@ void StartRPCThreads()
         acceptor->set_option(boost::asio::ip::v6_only(loopback), v6_only_error);
 
         acceptor->bind(endpoint);
+#if BOOST_VERSION >= 106600
+        acceptor->listen(boost::asio::socket_base::max_listen_connections);
+#else
         acceptor->listen(socket_base::max_connections);
+#endif
 
         RPCListen(acceptor, *rpc_ssl_context, fUseSSL);
 
@@ -824,7 +894,11 @@ void StartRPCThreads()
             acceptor->open(endpoint.protocol());
             acceptor->set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
             acceptor->bind(endpoint);
+#if BOOST_VERSION >= 106600
+            acceptor->listen(boost::asio::socket_base::max_listen_connections);
+#else
             acceptor->listen(socket_base::max_connections);
+#endif
 
             RPCListen(acceptor, *rpc_ssl_context, fUseSSL);
 
@@ -843,8 +917,13 @@ void StartRPCThreads()
     }
 
     rpc_worker_group = new boost::thread_group();
+#if BOOST_VERSION >= 107000
+    for (int i = 0; i < GetArg("-rpcthreads", 4); i++)
+        rpc_worker_group->create_thread(boost::bind(&asio::io_context::run, rpc_io_service));
+#else
     for (int i = 0; i < GetArg("-rpcthreads", 4); i++)
         rpc_worker_group->create_thread(boost::bind(&asio::io_service::run, rpc_io_service));
+#endif
 }
 
 void StopRPCThreads()
@@ -1060,8 +1139,13 @@ Object CallRPC(const string& strMethod, const Array& params)
 
     // Connect to localhost
     bool fUseSSL = GetBoolArg("-rpcssl");
+#if BOOST_VERSION >= 107000
+    asio::io_context io_service;
+    ssl::context context(ssl::context::sslv23);
+#else
     asio::io_service io_service;
     ssl::context context(io_service, ssl::context::sslv23);
+#endif
     context.set_options(ssl::context::no_sslv2);
     asio::ssl::stream<asio::ip::tcp::socket> sslStream(io_service, context);
     SSLIOStreamDevice<asio::ip::tcp> d(sslStream, fUseSSL);

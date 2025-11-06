@@ -1123,8 +1123,17 @@ void ThreadMapPort()
     struct UPNPUrls urls;
     struct IGDdatas data;
     int r;
-
+    char wanaddr[64] = {0};
+#if MINIUPNPC_API_VERSION < 14
+    // miniupnpc <= 1.6 signature with WAN address output
+    r = UPNP_GetValidIGD(devlist, &urls, &data, lanaddr, sizeof(lanaddr), wanaddr, sizeof(wanaddr));
+#elif MINIUPNPC_API_VERSION < 18
+    // miniupnpc >= 1.9 signature without WAN address output
     r = UPNP_GetValidIGD(devlist, &urls, &data, lanaddr, sizeof(lanaddr));
+#else
+    // miniupnpc >= 2.1 signature
+    r = UPNP_GetValidIGD(devlist, &urls, &data, lanaddr, sizeof(lanaddr), wanaddr, sizeof(wanaddr));
+#endif
     if (r == 1)
     {
         if (fDiscover) {
@@ -2741,6 +2750,13 @@ bool BindListenPort(const CService &addrBind, string& strError)
     in_keep_alive.keepalivetime = 60000;
     WSAIoctl(hListenSocket, SIO_KEEPALIVE_VALS, (LPVOID)&in_keep_alive, sizeof(struct tcp_keepalive),
         (LPVOID)&out_keep_alive, sizeof(struct tcp_keepalive), &ul_bytes_return, NULL, NULL);
+#elif defined(__APPLE__)
+    int idel = 60;
+    int interval = 20;
+    int cnt = 3;
+    setsockopt(hListenSocket, IPPROTO_TCP, TCP_KEEPALIVE, (const void *)&idel, sizeof(idel));
+    setsockopt(hListenSocket, IPPROTO_TCP, TCP_KEEPINTVL, (const void *)&interval, sizeof(interval));
+    setsockopt(hListenSocket, IPPROTO_TCP, TCP_KEEPCNT, (const void *)&cnt, sizeof(cnt));
 #else
     int idel = 60;
     int interval = 20;
