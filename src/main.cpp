@@ -2852,7 +2852,7 @@ bool InitBlockIndex() {
         printf("Expected genesis hash:   %s\n", hashGenesisBlock.ToString().c_str());
         printf("Merkle root:             %s\n", block.hashMerkleRoot.ToString().c_str());
         printf("Expected merkle root:    0xaef6a6cb3767fa5d965b10f9d1e3e183ddea21a5f7ffce9bd7a86c065e7c6865\n");
-        
+        // assert(block.hashMerkleRoot == uint256("0xaef6a6cb3767fa5d965b10f9d1e3e183ddea21a5f7ffce9bd7a86c065e7c6865"));
         // Check if hashes match
         if (hash != hashGenesisBlock) {
             printf("\n*** ERROR: Genesis block hash mismatch! ***\n");
